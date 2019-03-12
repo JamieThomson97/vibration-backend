@@ -1,7 +1,6 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 admin.initializeApp();
-admin.initializeApp()
 var database = admin.firestore()
 
 const cors = require('cors')({
