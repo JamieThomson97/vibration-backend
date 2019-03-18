@@ -1,5 +1,5 @@
 // A module for cleaner functions
-
+//firebase deploy --only functions
 // Index.js is a fucking mess
 
 const functions = require('firebase-functions');
@@ -13,28 +13,46 @@ var database = admin.firestore();
     // Doesn't have functionality for actual audio file yet,
     // Needs to trigger further function to send new mID to followers' timelines'
 exports.addMix = functions.https.onCall((data, context) => {
-    const uID = context.auth.uid
-
-    // Receives data from request and puts into an object
-    var mixData = {
-      uID: uID,
-      title: data.title,
-      dateUploaded: new Date(),
-      tracklist: data.tracklist,
-      series: data.series
-    }
-    console.log(mixData)
-    // .add function adds a new object to the specified reference
-    const ref = admin.firestore().collection('mixes')
-    return ref.add(mixData).then((snapshot) => {
-        //Get this of uIDs from 'followers' subCollection
-        return snapshot
   
-    }).catch((error) => {
-      return error
-    })
+  var firstPromises = []
+  var mixPromises = []
+  uID = context.auth.uid
+  // Receives data from request and puts into an object
+  var mixData = {
+    uID: uID,
+    title: data.title,
+    dateUploaded: new Date(),
+    tracklist: data.tracklist,
+    series: data.series,
+  }
 
+  const followersProm = returnIDs(uID, 'followers', false)
+  var mID = database.collection("mixes").add(mixData).then(response => {
+    return response.id
+  }).catch(error => {
+    return error
   })
+
+  firstPromises.push(followersProm)
+  firstPromises.push(mID)
+
+  return Promise.all(firstPromises).then(response => {
+    mIDs = response[0]
+    mID = response[1]
+    console.log(mID)
+    mixPromises.push(database.collection("users").doc(uID).collection('mixes').doc(mID).set(mixData))
+    for (var follower in mIDs) {
+      console.log(follower)
+      mixPromises.push(database.collection("users").doc(mIDs[follower]).collection('timeline').doc(mID).set(mixData))
+    }
+    return response
+  }).then(() => {
+    return Promise.all(mixPromises)
+  }).catch(error => {
+    console.log(error)
+  })
+})
+  
 
   // What needs to happen every time a producer adds a new mix ?
   // All of their followers should have the new mix inserted at the top of their 'timeline' subCollections
@@ -44,56 +62,70 @@ exports.addMix = functions.https.onCall((data, context) => {
 // Notes:
     // Doesn't have functionality for actual audio file yet,
 exports.deleteMix = functions.https.onCall((data, response) => {
-    var promises = []
+  var promises = []
 
-    // Get the mixID and the userid from the request
-    const mID = data.mID
-    const uID = data.uID
+  // Get the mixID and the userid from the request
+  const mID = 'testDoc' //data.mID
+  const uID = 'GBeZHcjhNjX44PXcJ8mE5BeYLBj2' //data.uID
 
-    // Get array of all follower IDs
-    const ref = database.collection('users').doc(uID).collection('followers')
-    ref.get((snapshot) => {
-      const timeline = snapshot.docs
-          console.log(timeline.length)
-          for (var entry = 0; entry < timeline.length; entry++) {
-            console.log(timeline[entry])
-            // Adds the document to an array, that will be passed into the next function --- *** currently working on, is not yet designed correctly, may cause errors ***
-            // Must ensure that when new mix is added, the cloud function creates the entries elsewhere using the SAME DOCUMENT ID, otherwise this will fail
-            const item = timeline[entry].data()
-            mIDs[timeline[entry]] = (item)
-          }
-          console.log(mIDs)
-    })
-  
-    // Remove mID from all follower 'timeline collections        
-    // Delete the mix using the mID reference from the 'mixes' collection 
-    // and user 'mixes' collection
+  // Get array of all follower IDs
+  followersProm = returnIDs(uID, 'followers', false)
+  return followersProm.then((response) => {
+    console.log(response+'  '+response.length)
     promises.push(database.collection("mixes").doc(mID).delete())
     promises.push(database.collection("users").doc(uID).collection('mixes').doc(mID).delete())
-    return Promise.all(promises).then(() => {
-      return {
-        'message': "Documents successfully deleted!"
-      }
+    for (var follower in response) {
+      promises.push(database.collection("users").doc(response[follower]).collection('timeline').doc(mID).delete())
+    }
+    return promises
+  }).then(response => {
+    return Promise.all(promises)
     }).catch((error) => {
       return {
         'message': "Error removing document: " + error
       }
-    });
-  })
+    }).then(response => {
+      return 'success deleting mix'
+    }).catch(error => {
+      return error
+    })
+})
+
+ 
+  // Remove mID from all follower 'timeline collections        
+  // Delete the mix using the mID reference from the 'mixes' collection 
+  // and user 'mixes' collection
 
 
 // Function to receive a path to a subcollection, possibly uID, and return all the objects in that subcollection -- for getting lists of IDs
 
-function returnIDs(uID, subCollection, ordered){
-    //Create query based on uID and subCollection given
-
-    // uID = 'perfectUser' //uID
-    // subCollection = 'timeline'
-
-    // var query = 
-
-    //if statement for if ordered or not
-
+//function returnIDs(uID, subCollection, orderBy){
+function returnIDs(uID, subCollection, orderBy){
+  //Create query based on uID and subCollection given
+  results = []
+   
+   //if statement for if ordered or not
+  if (!orderBy) {
+    var query = database.collection('users').doc(uID).collection(subCollection)
+  }
+  else {
+    query = database.collection('users').doc(uID).collection(subCollection).orderBy(orderBy, "DESC").limit(12)
+  }
+   
+  return query.get().then((snapshot) => {
+    const documents = snapshot.docs
+    for (var entry = 0; entry < documents.length; entry++){
+      
+      // Adds the document to an array, that will be passed into the next function --- *** currently working on, is not yet designed correctly, may cause errors ***
+      // Must ensure that when new mix is added, the cloud function creates the entries elsewhere using the SAME DOCUMENT ID, otherwise this will fail
+      const item = documents[entry].id
+      results.push(item)
+      
+    }
+    return (results)
+  }).catch((error) => {
+    console.log(error)
+  })
     //populate array with mIDs
 
     //Return --- may need to be a promise
