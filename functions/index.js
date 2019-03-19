@@ -71,7 +71,7 @@ exports.deleteMix = functions.https.onCall((data, response) => {
   // Get array of all follower IDs
   followersProm = returnIDs(uID, 'followers', false)
   return followersProm.then((response) => {
-    console.log(response+'  '+response.length)
+    
     promises.push(database.collection("mixes").doc(mID).delete())
     promises.push(database.collection("users").doc(uID).collection('mixes').doc(mID).delete())
     for (var follower in response) {
@@ -189,4 +189,94 @@ exports.getSubCollectionbyDate = functions.https.onCall((data, response) => {
   }).catch((error) => {
     console.log(error)
   })
+})
+
+exports.followUser = functions.https.onCall((data, response) => {
+  followingName = 'Producer Jamie' //data.followingName -- The name of the user that is being followed
+  followeruID = 'GBeZHcjhNjX44PXcJ8mE5BeYLBj2' //data.followeruID -- The uID of the user that is doing the following
+  followerName = 'Perfect User'//data.followerName -- The name of the user that is doing the following 
+  
+  followingNameObject = {
+    'name' : followingName
+  }
+  followerNameObject = {
+    'name' : followerName
+  }
+
+  
+  //Get the following uID from the following name
+
+  const followinguID = database.collection('users').where('name', '==', followingName).get().then(response => { //The uID of the user that is being followed
+    return response.docs[0].id
+  }).catch(error => {
+    return error
+  })
+
+  var promises = []
+  //Promise to add followerUID and name to the 'followers' sub collection of the user being followed. and update the aggregate count,
+
+  
+  
+  //Add followerUID and name to the 'followers' sub collection of the user being followed. and update the aggregate count,
+
+  return followinguID.then(response => {
+    console.log(response)
+    console.log(promises.length)
+    
+    promises.push(database.collection('users').doc(response).collection('followers').doc(followeruID).set(followerNameObject))
+    console.log('hello')
+    promises.push(database.collection('users').doc(followeruID).collection('following').doc(response).set(followingNameObject))
+    console.log(promises.length)
+    return Promise.all(promises)
+  }).catch(error =>{
+    return error
+  })
+})
+
+exports.aggregateFollowers = functions.firestore
+  .document('users/{uID}/followers/{fID}')
+  .onWrite((change, context) => {
+    const uID = context.params.uID
+    //const fID = context.params.fID
+
+    uIDRef =  database.collection('users').doc(uID)
+    
+    // Update aggregations in a transaction
+    return database.runTransaction(transaction => {
+      return transaction.get(uIDRef).then(uIDDoc => {
+        // Compute new number of followers
+        console.log(uIDDoc.data().followerCount)
+        var newFollowersCount = uIDDoc.data().followerCount + 1
+
+        
+        // Update followers info
+        return transaction.update(uIDRef, {
+          followerCount: newFollowersCount
+        })
+      })
+    })
+})
+
+exports.aggregateFollowing = functions.firestore
+  .document('users/{uID}/following/{fID}')
+  .onWrite((change, context) => {
+    const uID = context.params.uID
+    //const fID = context.params.fID
+
+    uIDRef =  database.collection('users').doc(uID)
+    
+    // Update aggregations in a transaction
+    return database.runTransaction(transaction => {
+      return transaction.get(uIDRef).then(uIDDoc => {
+        // Compute new number of followers
+        console.log(uIDDoc.data().followingCount)
+        var newFollowingCount = uIDDoc.data().followingCount + 1
+
+        
+        // Update followers info
+        return transaction.update(uIDRef, {
+          followingCount: newFollowingCount
+        });
+      });
+    });
 })
