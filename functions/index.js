@@ -214,6 +214,32 @@ function getSubCollection(uID, subCollection, amount){
   })
 }
 
+
+
+exports.getFollowX = functions.https.onCall((data, response) => {
+
+ const uID = data.uID
+ const followX = data.followX
+ results = []
+ query = database.collection('users').doc(uID).collection(followX).limit(15)
+  
+
+  return query.get().then((snapshot) => {
+    const documents = snapshot.docs
+   
+    for (var entry = 0; entry < documents.length; entry++){
+      const item = documents[entry].data()
+      item['id'] = documents[entry].id
+      results.push(item)
+    }
+    return (results)
+  }).catch((error) => {
+    console.log(error)
+  })
+
+})
+
+
 exports.followUser = functions.https.onCall((data, response) => {
   
   followingName = data.followingName // The name of the user that is being followed
