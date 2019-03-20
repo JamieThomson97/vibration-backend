@@ -25,6 +25,7 @@ exports.addMix = functions.https.onCall((data, context) => {
     dateUploaded: new Date(),
     tracklist: data.tracklist,
     series: data.series,
+    producer : data.producer,
   }
 
   const followersProm = returnIDs(uID, 'followers', false)
@@ -281,7 +282,8 @@ function editTimeline(followeruID, followeduID, copy) {
           'series' : mix.series,
           'title': mix.title,
           'tracklist' : mix.tracklist,
-          'uID' : mix.uID,
+          'uID': mix.uID,
+          'producer' : mix.producer,
         }
 
         setter = database.collection('users').doc(followeruID).collection('timeline').doc(mix.id).set(addMix)
