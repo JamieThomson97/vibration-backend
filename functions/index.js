@@ -25,7 +25,8 @@ exports.addMix = functions.https.onCall((data, context) => {
     dateUploaded: new Date(),
     tracklist: data.tracklist,
     series: data.series,
-    producer : data.producer,
+    producer: data.producer,
+    likeCount : 0,
   }
 
   const followersProm = returnIDs(uID, 'followers', false)
@@ -309,7 +310,8 @@ function editTimeline(followeruID, followeduID, copy) {
           'title': mix.title,
           'tracklist' : mix.tracklist,
           'uID': mix.uID,
-          'producer' : mix.producer,
+          'producer': mix.producer,
+          'likes' : 0 ,
         }
 
         setter = database.collection('users').doc(followeruID).collection('timeline').doc(mix.id).set(addMix)
@@ -467,4 +469,107 @@ exports.addedFollowing = functions.firestore
         });
       });
     });
+  })
+
+  exports.addedToMixesSubCollection = functions.firestore
+  .document('mixes/{mID}/{subCollection}/{uID}')
+  .onCreate((change, context) => {
+    const mID = context.params.mID
+    const uID = context.params.uID
+    const subCollection = context.params.subCollection
+
+    //addedToMixesSubCollection({ data : 'data' } , { params : {mID : 'aXMRaJwmgMONp4I83tEi', subCollection : 'likes' , ID : 'GBeZHcjhNjX44PXcJ8mE5BeYLBj2' } })
+
+    console.log(mID, uID, subCollection)
+
+    mIDRef =  database.collection('mixes').doc(mID)
+    
+    // Update aggregations in a transaction
+    return database.runTransaction(transaction => {
+      return transaction.get(mIDRef).then(mIDDoc => {
+        // Compute new number of followers
+        console.log(mIDDoc.data().likeCount)
+        var newlikeCount = mIDDoc.data().likeCount + 1
+
+        
+        // Update followers info
+        return transaction.update(mIDRef, {
+          likeCount: newlikeCount
+        });
+      });
+    });
+  })
+
+  exports.removedFromMixesSubCollection = functions.firestore
+  .document('mixes/{mID}/{subCollection}/{uID}')
+  .onDelete((change, context) => {
+    const mID = context.params.mID
+    const uID = context.params.uID
+    const subCollection = context.params.subCollection
+
+    //removedFromMixesSubCollection({ data : 'data' } , { params : {mID : 'aXMRaJwmgMONp4I83tEi', subCollection : 'likes' , ID : 'GBeZHcjhNjX44PXcJ8mE5BeYLBj2' } })
+
+    console.log(mID, uID, subCollection)
+
+    mIDRef =  database.collection('mixes').doc(mID)
+    
+    // Update aggregations in a transaction
+    return database.runTransaction(transaction => {
+      return transaction.get(mIDRef).then(mIDDoc => {
+        // Compute new number of followers
+        console.log(mIDDoc.data().likeCount)
+        var newlikeCount = mIDDoc.data().likeCount - 1
+
+        
+        // Update followers info
+        return transaction.update(mIDRef, {
+          likeCount: newlikeCount
+        });
+      });
+    });
+  })
+
+
+  exports.likeMix = functions.https.onCall((data, response) => {
+  
+    mID = data.mID 
+    likeruID = data.likeruID 
+    produceruID = data.likeruID 
+    likerName = data.likerName 
+    mixName = data.mixName
+    liked = data.liked
+
+     
+    // mID = 'aXMRaJwmgMONp4I83tEi'
+    // likeruID = 'GBeZHcjhNjX44PXcJ8mE5BeYLBj2'
+    // produceruID = 'lN4w75KT3la5sCRS5UjZE2uqxd43'
+    // likerName = 'Perfect User'
+    // mixName = 'Mix 2'
+    // liked = false
+    
+    likerNameObject = {
+      'name' : likerName
+    }
+    mixNameObject = {
+      'title' : mixName
+    }
+    
+    console.log('hello')
+  
+    var promises = []
+    //Promise to add followerUID and name to the 'followers' sub collection of the user being followed. and update the aggregate count,
+   //Add followerUID and name to the 'followers' sub collection of the user being followed. and update the aggregate count,
+   
+    if (liked) {
+      promises.push(database.collection('mixes').doc(mID).collection('liked').doc(likeruID).set(likerNameObject))
+      promises.push(database.collection('users').doc(likeruID).collection('likedMixes').doc(mID).set(mixNameObject))
+    } else {
+      promises.push(database.collection('mixes').doc(mID).collection('liked').doc(likeruID).delete())
+      promises.push(database.collection('users').doc(likeruID).collection('likedMixes').doc(mID).delete())
+    }
+
+    return Promise.all(promises)
+ 
 })
+
+  
