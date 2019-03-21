@@ -538,7 +538,11 @@ exports.addedFollowing = functions.firestore
     likerName = data.likerName 
     mixName = data.mixName
     liked = data.liked
-
+    producerName = data.producerName
+    profileURL = data.profileURL
+    artworkURL = data.artworkURL
+    likes = data.likes
+    plays = data.plays  
      
     // mID = 'aXMRaJwmgMONp4I83tEi'
     // likeruID = 'GBeZHcjhNjX44PXcJ8mE5BeYLBj2'
@@ -548,10 +552,16 @@ exports.addedFollowing = functions.firestore
     // liked = false
     
     likerNameObject = {
-      'name' : likerName
+      'name' : likerName,
+      'profileURL' : profileURL
+      
     }
     mixNameObject = {
-      'title' : mixName
+      'title' : mixName,
+      'producer' : producerName,
+      'artWorkURL' : artworkURL,
+      'likes' : likes,
+      'plays' : plays,
     }
     
     console.log('hello')
