@@ -7,7 +7,11 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 admin.initializeApp();
 var database = admin.firestore();
+const env = functions.config()
+const algoliaSearch = require('algoliasearch')
 
+const client = algoliaSearch(env.algolia.appid, env.algolia.apikey)
+const index = client.initIndex('test_mixes')
 
 // This function is called when a user submits a new mix
 // Notes : 
@@ -46,7 +50,6 @@ exports.addMix = functions.https.onCall((data, context) => {
     mixPromises.push(database.collection("users").doc(uID).collection('mixes').doc(mID).set(mixData))
     for (var follower in mIDs) {
       console.log(follower)
-      mixPromises.push(database.collection("users").doc(mIDs[follower]).collection('timeline').doc(mID).set(mixData))
     }
     return response
   }).then(() => {
@@ -79,6 +82,7 @@ exports.deleteMix = functions.https.onCall((data, response) => {
     for (var follower in response) {
       promises.push(database.collection("users").doc(response[follower]).collection('timeline').doc(mID).delete())
     }
+    promises.push(firebase.functions().httpsCallable('unIndexMix' , { NmID : NmID }))
     return promises
   }).then(response => {
     return Promise.all(promises)
@@ -243,10 +247,12 @@ exports.getFollowX = functions.https.onCall((data, response) => {
 
 exports.followUser = functions.https.onCall((data, response) => {
   
-  followingName = data.followingName // The name of the user that is being followed
-  followeruID = data.followeruID // The uID of the user that is doing the following
-  followerName = data.followerName // The name of the user that is doing the following 
+  followingName = data.followingName // The name of the user that is being followed or unfollowed
+  followeruID = data.followeruID // The uID of the user that is doing the following or unfollowing
+  followerName = data.followerName // The name of the user that is doing the following or unfollowing
   follow = data.follow
+
+  console.log(followingName+'    ' +followeruID+'    ' +followerName+"  "+follow)
 
   // followingName = 'Test Producer' // The name of the user that is being followed
   // followeruID = 'GBeZHcjhNjX44PXcJ8mE5BeYLBj2' // The uID of the user that is doing the following
@@ -272,15 +278,20 @@ exports.followUser = functions.https.onCall((data, response) => {
   var copyfuID = null
   
   return followinguID.then(response => {
-    
+    console.log("response  :  "+response)
+    console.log('followeruID : '+followeruID)
     if (follow) {
+      console.log('in true')
       promises.push(database.collection('users').doc(response).collection('followers').doc(followeruID).set(followerNameObject))
       promises.push(database.collection('users').doc(followeruID).collection('following').doc(response).set(followingNameObject))
-      promises.push(editTimeline(followeruID , response, true))
+      editTimeline(followeruID, response, true)
+      console.log('end true')
     } else {
+      console.log('in false')
       promises.push(database.collection('users').doc(response).collection('followers').doc(followeruID).delete())
       promises.push(database.collection('users').doc(followeruID).collection('following').doc(response).delete())
-      promises.push(editTimeline(followeruID , response, false))
+      editTimeline(followeruID, response, false)
+      console.log('end false')
     }
 
     return Promise.all(promises)
@@ -298,10 +309,13 @@ function editTimeline(followeruID, followeduID, copy) {
  
   //Add them to the user doing the 'following's timeline
 
-  return mixes.then(response => {
-    for (i in response) {
+  return mixes.get().then(response => {
+    console.log('new')
+    for (i in response.docs()) {
       mix = response[i]
-      
+      console.log(mix + '   mix')
+      console.log(mix.data + '   mix.data')
+      console.log(mix.data()+'   mix.data()')
       if (copy) {
 
         addMix = {
@@ -311,7 +325,7 @@ function editTimeline(followeruID, followeduID, copy) {
           'tracklist' : mix.tracklist,
           'uID': mix.uID,
           'producer': mix.producer,
-          'likes' : 0 ,
+          'likeCount' : mix.likeCount ,
         }
 
         setter = database.collection('users').doc(followeruID).collection('timeline').doc(mix.id).set(addMix)
@@ -374,13 +388,22 @@ exports.addedFollower = functions.firestore
   .document('users/{uID}/followers/{fID}')
   .onCreate((change, context) => {
     
-    const uID = context.params.uID
+    const uID = context.params.uID //the user that has been followed
+    const fID = context.params.fID //the user doing the following
+
+    //const uID = 'GBeZHcjhNjX44PXcJ8mE5BeYLBj2' //the user that has been followed
+    //const fID = 'lN4w75KT3la5sCRS5UjZE2uqxd43' //the user doing the following
+
     console.log('added follower')
 
+    var topPromises = []
+    var mixPromises = []
+
+    const firstPromises = getSubCollection(uID, 'mixes', false)
     uIDRef =  database.collection('users').doc(uID)
     
     // Update aggregations in a transaction
-    return database.runTransaction(transaction => {
+    var dbTrans =  database.runTransaction(transaction => {
       return transaction.get(uIDRef).then(uIDDoc => {
         // Compute new number of followers
         console.log(uIDDoc.data().followerCount)
@@ -394,33 +417,78 @@ exports.addedFollower = functions.firestore
         })
       })
     })
-  })
+
+    topPromises.push(firstPromises)
+    topPromises.push(dbTrans)    
+    
+    return Promise.all(topPromises).then((response) => {
+      var mixes = response[0]
+      for (i in mixes) {
+        mix = mixes[i]
+        console.log(mix)
+        addMix = {
+          'dateUploaded': mix.dateUploaded,
+          'title': mix.title,
+          'uID': mix.uID,
+          'producer': mix.producer,
+          'likeCount': mix.likeCount,
+          'streamURL' : mix.streamURL,
+        }
+      const mixPromise = database.collection('users').doc(fID).collection('timeline').doc(mix.id).set(addMix)
+      mixPromises.push(mixPromise)
+      }
+      return Promise.all(mixPromises)
+    })
+})
 
   exports.lostFollower = functions.firestore
   .document('users/{uID}/followers/{fID}')
   .onDelete((change, context) => {
     
-    const uID = context.params.uID
-    //const fID = context.params.fID
+    const uID = context.params.uID //the user that has been followed
+    const fID = context.params.fID //the user doing the following
 
+    // const uID = 'GBeZHcjhNjX44PXcJ8mE5BeYLBj2' //the user that has been followed
+    // const fID = 'lN4w75KT3la5sCRS5UjZE2uqxd43' //the user doing the following
+
+    console.log('lost follower')
+
+    var topPromises = []
+    var mixPromises = []
+
+    const firstPromises = getSubCollection(uID, 'mixes', false)
     uIDRef =  database.collection('users').doc(uID)
     
     // Update aggregations in a transaction
-    return database.runTransaction(transaction => {
+    var dbTrans =  database.runTransaction(transaction => {
       return transaction.get(uIDRef).then(uIDDoc => {
         // Compute new number of followers
         console.log(uIDDoc.data().followerCount)
-        var newFollowersCount = uIDDoc.data().followerCount -1
+        var newFollowersCount = uIDDoc.data().followerCount - 1
         console.log('old count ^^^^ -- new count (below)')
         console.log(newFollowersCount)
-
-        
         // Update followers info
         return transaction.update(uIDRef, {
           followerCount: newFollowersCount
         })
       })
     })
+
+    topPromises.push(firstPromises)
+    topPromises.push(dbTrans)    
+
+    return Promise.all(topPromises).then((response) => {
+      var mixes = response[0]
+      for (i in mixes) {
+        mix = mixes[i]
+        console.log(mix)
+        
+      const mixPromise = database.collection('users').doc(fID).collection('timeline').doc(mix.id).delete()
+      mixPromises.push(mixPromise)
+      }
+      return Promise.all(mixPromises)
+    })
+
 })
 
 exports.addedFollowing = functions.firestore
@@ -580,6 +648,28 @@ exports.addedFollowing = functions.firestore
 
     return Promise.all(promises)
  
-})
+  })
+
+exports.indexMix = functions.https
+  .onCall((data, response) => {
+
+        const mixData = data.mixData
+        const objectID = data.NmID
+
+        return index.addObject({
+            objectID,
+            mixData
+        })
+    })
+
+    //Commeneted about because of change of trigger type was uneeded
+// exports.unIndexMix = functions.https 
+//   .onCall((data, response) => {
+      
+//         const objectID = data.NmID
+          
+//         return index.deleteObject({objectID})
+//     })
+
 
   
