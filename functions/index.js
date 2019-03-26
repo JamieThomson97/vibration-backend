@@ -670,7 +670,7 @@ exports.indexMix = functions.https
     const unix = new Date()
     const timestamp = Date.now()
     const dateUploaded = unix.toLocaleDateString('en-GB', options);
-    const dateUploaded2 = unix.toLocaleDateString('en-GB', options2);
+    const dateUploaded2 = unix.toLocaleDateString('en-GB', options2); //Secondary search for users that want to search in the dd/mm/yy format, which was not previously supported
     
     
     return index.addObject({
