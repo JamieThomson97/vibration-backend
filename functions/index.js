@@ -92,6 +92,7 @@ exports.deleteMix = functions.https.onCall((data, response) => {
       }
     }).then(response => {
       return 'success deleting mix'
+      //Need to delete from storage
     }).catch(error => {
       return error
     })
@@ -651,25 +652,50 @@ exports.addedFollowing = functions.firestore
   })
 
 exports.indexMix = functions.https
-  .onCall((data, response) => {
+  .onCall((mix, response) => {
 
-        const mixData = data.mixData
-        const objectID = data.NmID
+    var options = { year: 'numeric', month: 'long', day: 'numeric' }
+    var options2 = { year: 'numeric', month: 'numeric', day: 'numeric' }
+   
+    const data = mix.mixData
+    const objectID = mix.NmID
 
-        return index.addObject({
-            objectID,
-            mixData
-        })
+    const title = data.title
+    const producer = data.producer
+    const artworkURL = data.artworkURL
+    const likeCount = 0
+    const series = data.series
+    const streamURL = data.streamURL
+    const uID = data.uID
+    const unix = new Date()
+    const timestamp = Date.now()
+    const dateUploaded = unix.toLocaleDateString('en-GB', options);
+    const dateUploaded2 = unix.toLocaleDateString('en-GB', options2);
+    
+    
+    return index.addObject({
+      objectID,
+      title,
+      producer,
+      likeCount,
+      series,
+      streamURL,
+      uID,
+      dateUploaded,
+      timestamp,
+      artworkURL,
+      dateUploaded2,
     })
+  })
 
-    //Commeneted about because of change of trigger type was uneeded
-// exports.unIndexMix = functions.https 
-//   .onCall((data, response) => {
-      
-//         const objectID = data.NmID
-          
-//         return index.deleteObject({objectID})
-//     })
+   
+exports.unIndexMix = functions.firestore
+  .document('mixes/{mID}')
+  .onDelete((snap, context) => {
+
+      const objectID = snap.id
+      return index.deleteObject(objectID)
+    })
 
 
   
