@@ -8,10 +8,10 @@ const admin = require('firebase-admin');
 admin.initializeApp();
 var database = admin.firestore();
 const env = functions.config()
-const algoliaSearch = require('algoliasearch')
+// const algoliaSearch = require('algoliasearch')
 
-const client = algoliaSearch(env.algolia.appid, env.algolia.apikey)
-const index = client.initIndex('test_mixes')
+// const client = algoliaSearch(env.algolia.appid, env.algolia.apikey)    /// Comment out when need to emulate
+// const index = client.initIndex('test_mixes')
 
 // This function is called when a user submits a new mix
 // Notes : 
@@ -47,7 +47,7 @@ exports.addMix = functions.https.onCall((data, context) => {
     mIDs = response[0]
     mID = response[1]
     console.log(mID)
-    mixPromises.push(database.collection("users").doc(uID).collection('mixes').doc(mID).set(mixData))
+    mixPromises.push(database.collection("users").doc(uID).collection('mixes').doc(mID).set(mixData)) 
     for (var follower in mIDs) {
       console.log(follower)
     }
@@ -74,6 +74,8 @@ exports.deleteMix = functions.https.onCall((data, response) => {
   const mID = data.mID
   const uID = data.uID
 
+  database.collection('songsPlaylists').doc(mID)
+
   // Get array of all follower IDs
   followersProm = returnIDs(uID, 'followers', false)
   return followersProm.then((response) => {
@@ -97,6 +99,42 @@ exports.deleteMix = functions.https.onCall((data, response) => {
       return error
     })
 })
+
+exports.deleteFromPlaylists = functions.https.onCall((data, response) => {
+
+  // Each document in the collection is a song that is in atleast one user's playlist
+  // Each document contains a map for each user that has the song in atleast one playlist
+  // The mID will be passed as input
+
+  const mID = data.mID
+  var deletePromises = []
+
+  return database.collection('playlists').doc(mID).get().then(response => {
+
+    var users = Object.keys(response.data())
+    var playlistNames = Object.values(response.data())
+  
+    //For each every playlist that each user has the mix, create a promise to delete the mix from that users playlist subCollection
+
+    for ( var i in users ){
+      var currentUser = users[i]
+      var currentPlaylistNames = playlistNames[i].playlistNames
+      
+      // eslint-disable-next-line no-loop-func
+      currentPlaylistNames.forEach(pName => {
+
+        var promise = database.collection('users').doc(currentUser).collection(pName).doc(mID).delete()
+        deletePromises.push(promise)
+      })
+    }
+    return deletePromises
+    
+  }).then(() => {
+    return Promise.all(deletePromises)
+    })
+})
+
+
 
  
   // Remove mID from all follower 'timeline collections        
@@ -252,6 +290,8 @@ exports.followUser = functions.https.onCall((data, response) => {
   followeruID = data.followeruID // The uID of the user that is doing the following or unfollowing
   followerName = data.followerName // The name of the user that is doing the following or unfollowing
   follow = data.follow
+  followerProfileURL  = data.followerProfileURL,
+  followingProfileURL = data.followingprofileURL,
 
   console.log(followingName+'    ' +followeruID+'    ' +followerName+"  "+follow)
 
@@ -262,10 +302,12 @@ exports.followUser = functions.https.onCall((data, response) => {
 
   
   followingNameObject = {
-    'name' : followingName
+    'name' : followingName, 
+    'profileURL' : followingProfileURL
   }
   followerNameObject = {
-    'name' : followerName
+    'name' : followerName, 
+    'profileURL' : followerProfileURL
   }
   const followinguID = database.collection('users').where('name', '==', followingName).get().then(response => { //The uID of the user that is being followed
     return response.docs[0].id
@@ -651,6 +693,8 @@ exports.addedFollowing = functions.firestore
  
   })
 
+/*
+
 exports.indexMix = functions.https
   .onCall((mix, response) => {
 
@@ -696,6 +740,8 @@ exports.unIndexMix = functions.firestore
       const objectID = snap.id
       return index.deleteObject(objectID)
     })
+
+    */
 
 
   
