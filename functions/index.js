@@ -22,6 +22,9 @@ exports.addMix = functions.https.onCall((data, context) => {
   var firstPromises = []
   var mixPromises = []
   uID = context.auth.uid
+
+  //THIS IS ONLY ON THE NEW BRANCH
+
   // Receives data from request and puts into an object
   var mixData = {
     uID: uID,
