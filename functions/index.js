@@ -8,33 +8,47 @@ const admin = require('firebase-admin');
 admin.initializeApp();
 var database = admin.firestore();
 const env = functions.config()
-// const algoliaSearch = require('algoliasearch')
+const algoliaSearch = require('algoliasearch')
 
-// const client = algoliaSearch(env.algolia.appid, env.algolia.apikey)    /// Comment out when need to emulate
-// const index = client.initIndex('test_mixes')
+const client = algoliaSearch(env.algolia.appid, env.algolia.apikey)    /// Comment out when need to emulate
+
 
 // This function is called when a user submits a new mix
 // Notes : 
     // Doesn't have functionality for actual audio file yet,
     // Needs to trigger further function to send new mID to followers' timelines'
+
+    //Not used, ran from front end
 exports.addMix = functions.https.onCall((data, context) => {
   
   var firstPromises = []
   var mixPromises = []
   uID = context.auth.uid
+  var mixData = data
 
-  //THIS IS ONLY ON THE NEW BRANCH
+  //Post to the 'mixes' collection
+
+  //Post to the producer's 'mixes' subCollection
+
+  //Post to every one of the producer's followers' 'timeline' subCollections 
 
   // Receives data from request and puts into an object
-  var mixData = {
-    uID: uID,
-    title: data.title,
-    dateUploaded: new Date(),
-    tracklist: data.tracklist,
-    series: data.series,
-    producer: data.producer,
-    likeCount : 0,
-  }
+  // var mixData = {
+  //   uID: uID,
+  //   title: data.title,
+  //   dateUploaded: new Date(),
+  //   tracklist: data.tracklist,
+  //   series: data.series,
+  //   producer: data.producer,
+  //   likeCount : 0,
+  // }
+  
+  mixData['DateUploaded'] = new Date()
+  mixData['uID'] = uID
+  mixData['playCount'] = 0
+  mixData['likeCount'] = 0
+  
+  
 
   const followersProm = returnIDs(uID, 'followers', false)
   var mID = database.collection("mixes").add(mixData).then(response => {
@@ -696,43 +710,49 @@ exports.addedFollowing = functions.firestore
  
   })
 
-/*
 
 exports.indexMix = functions.https
   .onCall((mix, response) => {
 
     var options = { year: 'numeric', month: 'long', day: 'numeric' }
     var options2 = { year: 'numeric', month: 'numeric', day: 'numeric' }
+    const index = client.initIndex('test_mixes')
    
     const data = mix.mixData
     const objectID = mix.NmID
 
     const title = data.title
-    const producer = data.producer
     const artworkURL = data.artworkURL
     const likeCount = 0
-    const series = data.series
+    const playCount = 0
+    
     const streamURL = data.streamURL
-    const uID = data.uID
+    const producers = data.producers
     const unix = new Date()
     const timestamp = Date.now()
     const dateUploaded = unix.toLocaleDateString('en-GB', options);
     const dateUploaded2 = unix.toLocaleDateString('en-GB', options2); //Secondary search for users that want to search in the dd/mm/yy format, which was not previously supported
     
-    
-    return index.addObject({
-      objectID,
+    var indexObject = {objectID,
       title,
-      producer,
+      playCount,
       likeCount,
-      series,
+      
       streamURL,
-      uID,
+      producers,
       dateUploaded,
       timestamp,
       artworkURL,
-      dateUploaded2,
-    })
+      dateUploaded2,}
+
+    if(data.event){
+      indexObject['event'] = data.event
+    }
+    if(data.show){
+      indexObject['show'] = data.show
+    }
+
+    return index.addObject({indexObject})
   })
 
    
@@ -744,7 +764,70 @@ exports.unIndexMix = functions.firestore
       return index.deleteObject(objectID)
     })
 
-    */
+
+    exports.indexEvent = functions.https
+      .onCall((eventData, response) => {
+
+      var options = { year: 'numeric', month: 'long', day: 'numeric' }
+      var options2 = { year: 'numeric', month: 'numeric', day: 'numeric' }
+      const index = client.initIndex('events')
+    
+      const data = eventData.eventData
+      const objectID = eventData.eID
+      console.log(data)
+      const name = data.name
+         
+      const producers = data.producers
+      const unix = new Date()
+      const timestamp = Date.now()
+      const dateCreated = unix.toLocaleDateString('en-GB', options);
+      const dateCreated2 = unix.toLocaleDateString('en-GB', options2); //Secondary search for users that want to search in the dd/mm/yy format, which was not previously supported
+      
+      var indexObject = {
+        
+        objectID,
+        name,
+        producers,
+        timestamp,
+        dateCreated,
+        dateCreated2,
+      }
+
+      
+      return index.addObject(indexObject)
+  })
+
+  exports.indexShow = functions.https
+      .onCall((showData, response) => {
+
+      var options = { year: 'numeric', month: 'long', day: 'numeric' }
+      var options2 = { year: 'numeric', month: 'numeric', day: 'numeric' }
+      const index = client.initIndex('shows')
+    
+      const data = showData.showData
+      const objectID = showData.eID
+      
+      const name = data.name
+         
+      const producers = data.producers
+      const unix = new Date()
+      const timestamp = Date.now()
+      const dateCreated = unix.toLocaleDateString('en-GB', options);
+      const dateCreated2 = unix.toLocaleDateString('en-GB', options2); //Secondary search for users that want to search in the dd/mm/yy format, which was not previously supported
+      
+      var indexObject = {
+        
+        objectID,
+        producers,
+        name,
+        timestamp,
+        dateCreated,
+        dateCreated2,
+      }
+
+      
+      return index.addObject(indexObject)
+  })
 
 
   
