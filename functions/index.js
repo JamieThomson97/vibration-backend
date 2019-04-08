@@ -7,10 +7,10 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 admin.initializeApp();
 var database = admin.firestore();
-// const env = functions.config()
-// const algoliaSearch = require('algoliasearch')
+const env = functions.config()
+const algoliaSearch = require('algoliasearch')
 
-// const client = algoliaSearch(env.algolia.appid, env.algolia.apikey)    /// Comment out when need to emulate
+const client = algoliaSearch(env.algolia.appid, env.algolia.apikey)    /// Comment out when need to emulate
 
 
 // This function is called when a user submits a new mix
@@ -308,7 +308,7 @@ function getSubCollection(uID, subCollection, amount){
    
     for (var entry = 0; entry < documents.length; entry++){
       const item = documents[entry].data()
-      item['id'] = documents[entry].id
+      item['uID'] = documents[entry].id
       results.push(item)
     }
     return (results)
@@ -332,7 +332,7 @@ exports.getFollowX = functions.https.onCall((data, response) => {
    
     for (var entry = 0; entry < documents.length; entry++){
       const item = documents[entry].data()
-      item['id'] = documents[entry].id
+      item['uID'] = documents[entry].id
       results.push(item)
     }
     return (results)
@@ -801,13 +801,15 @@ exports.indexMix = functions.https
 
     var options = { year: 'numeric', month: 'long', day: 'numeric' }
     var options2 = { year: 'numeric', month: 'numeric', day: 'numeric' }
-    const index = client.initIndex('test_mixes')
+    const index = client.initIndex('mixes')
    
     const data = mix.mixData
     const objectID = mix.NmID
+    const mID = mix.NmID
 
     const title = data.title
     const artworkURL = data.artworkURL
+    const audioURL = data.audioURL
     const likeCount = 0
     const playCount = 0
     
@@ -822,8 +824,8 @@ exports.indexMix = functions.https
       title,
       playCount,
       likeCount,
-      
-      streamURL,
+      mID,
+      audioURL,
       producers,
       dateUploaded,
       timestamp,
@@ -837,20 +839,20 @@ exports.indexMix = functions.https
       indexObject['show'] = data.show
     }
 
-    return index.addObject({indexObject})
+    return index.addObject(indexObject)
   })
 
    
-exports.unIndexMix = functions.firestore
+exports.unIndexShow = functions.firestore
   .document('mixes/{mID}')
   .onDelete((snap, context) => {
 
-      const index = client.initIndex('test_mixes')
+      const index = client.initIndex('mixes')
       const objectID = snap.id
       return index.deleteObject(objectID)
     })
 
-exports.unIndexMix = functions.firestore
+exports.unIndexUser = functions.firestore
   .document('users/{uID}')
   .onDelete((snap, context) => {
 
@@ -859,7 +861,7 @@ exports.unIndexMix = functions.firestore
       return index.deleteObject(objectID)
     })
 
-exports.unIndexMix = functions.firestore
+exports.unIndexEvent = functions.firestore
   .document('shows/{sID}')
   .onDelete((snap, context) => {
 
@@ -878,6 +880,7 @@ exports.indexEvent = functions.https
 
   const data = eventData.eventData
   const objectID = eventData.eID
+  const eID = eventData.eID
   const name = data.name
   const producers = data.producers
   const unix = new Date()
@@ -891,6 +894,7 @@ exports.indexEvent = functions.https
     producers,
     timestamp,
     dateCreated,
+    eID,
     dateCreated2,
   }
   return index.addObject(indexObject)
@@ -905,7 +909,7 @@ exports.indexEvent = functions.https
     
       const data = showData.showData
       const objectID = showData.eID
-      const eID = showData.eID
+      const sID = showData.eID
       const name = data.name
          
       const producers = data.producers
@@ -918,7 +922,7 @@ exports.indexEvent = functions.https
         
         objectID,
         producers,
-        eID,
+        sID,
         name,
         timestamp,
         dateCreated,
@@ -960,11 +964,35 @@ exports.indexEvent = functions.https
 
   const index = client.initIndex('producers')
 
-  const objectID = data.uID
-  const profileURL = data.profileURL
-  
+    
+    console.log('objectID')
+    console.log(data.objectID)
    return index.partialUpdateObject({
-     profileURL, 
-     objectID
+     objectID : data.objectID,
+     profileURL : data.profileURL
    })
+})
+
+exports.updateShowIndex = functions.https
+.onCall((data, response) => {
+
+const index = client.initIndex('shows')
+
+  
+
+ return index.partialUpdateObject({
+   objectID : data.objectID,
+   imageURL : data.imageURL
+ })
+})
+
+exports.updateEventIndex = functions.https
+.onCall((data, response) => {
+
+const index = client.initIndex('events')  
+
+ return index.partialUpdateObject({
+   objectID : data.objectID,
+   imageURL : data.imageURL
+ })
 })
