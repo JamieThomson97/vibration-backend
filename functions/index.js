@@ -7,10 +7,10 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 admin.initializeApp();
 var database = admin.firestore();
-const env = functions.config()
-const algoliaSearch = require('algoliasearch')
+// const env = functions.config()
+// const algoliaSearch = require('algoliasearch')
 
-const client = algoliaSearch(env.algolia.appid, env.algolia.apikey)    /// Comment out when need to emulate
+// const client = algoliaSearch(env.algolia.appid, env.algolia.apikey)    /// Comment out when need to emulate
 
 
 // This function is called when a user submits a new mix
@@ -86,36 +86,78 @@ exports.addMix = functions.https.onCall((data, context) => {
     // Doesn't have functionality for actual audio file yet,
 exports.deleteMix = functions.https.onCall((data, response) => {
   var promises = []
-
-  // Get the mixID and the userid from the request
   const mID = data.mID
   const uID = data.uID
+  promises.push(database.collection("mixes").doc(mID).delete())
+  promises.push(database.collection("users").doc(uID).collection('mixes').doc(mID).delete())
+  promises.push(database.collection('mixPlaylists').doc(mID).delete())
 
-  database.collection('songsPlaylists').doc(mID)
-
-  // Get array of all follower IDs
+  // Get the mixID and the userid from the request
+ 
+  
+  
+  
   followersProm = returnIDs(uID, 'followers', false)
-  return followersProm.then((response) => {
-    promises.push(database.collection("mixes").doc(mID).delete())
-    promises.push(database.collection("users").doc(uID).collection('mixes').doc(mID).delete())
-    for (var follower in response) {
-      promises.push(database.collection("users").doc(response[follower]).collection('timeline').doc(mID).delete())
-    }
-    promises.push(firebase.functions().httpsCallable('unIndexMix' , { NmID : NmID }))
-    return promises
-  }).then(response => {
-    return Promise.all(promises)
-    }).catch((error) => {
-      return {
-        'message': "Error removing document: " + error
-      }
-    }).then(response => {
-      return 'success deleting mix'
-      //Need to delete from storage
-    }).catch(error => {
-      return error
+
+  return database.collection('mixPlaylists').doc(mID).get().then(response => {
+    const playlistData = response.data()
+    Object.keys(playlistData.uIDs).forEach(uID => {
+      console.log(uID)
+      var playlistNames = playlistData.uIDs[uID]
+      console.log(playlistNames)
+      Object.keys(playlistNames).forEach(playlistNameKey => {
+        var playlistName = playlistNames[playlistNameKey]
+        console.log(playlistName)
+        var promise = database.collection('users').doc(uID).collection(playlistName).doc(mID).delete()
+        promises.push(promise)
+      })
     })
+    return followersProm
+  }).then((response) => {
+
+      for (var follower in response) {
+        console.log('response follower')
+        console.log(response[follower])
+        promises.push(database.collection("users").doc(response[follower]).collection('timeline').doc(mID).delete())
+        promises.push(database.collection("users").doc(response[follower]).collection('history').doc(mID).delete())
+        promises.push(database.collection("users").doc(response[follower]).collection('listenLater').doc(mID).delete())
+      }
+      // promises.push(firebase.functions().httpsCallable('unIndexMix' , { NmID : NmID }))
+      return promises
+      
+      }).then(response => {
+        return Promise.all(response)
+        }).catch((error) => {
+          return {
+            'message': "Error removing document: " + error
+          }
+        }).then(response => {
+          return 'success deleting mix'
+          //Need to delete from storage
+        }).catch(error => {
+          return error
+        })
+
+   
 })
+
+
+    exports.deleteFromShowEvent = functions.https.onCall((data, response) => {
+
+      const type = data.type
+      const gatherName = data.gatherName
+      const mID = data.mID
+      
+      //get ID from gathername
+
+      return database.collection(type).where('name' , '==' , gatherName).get().then(response => {
+        return response.docs[0].id
+      }).then(xID => {
+        //delete the mix from the mixes subcollection
+        return database.collection(type).doc(xID).collection('mixes').doc(mID).delete()
+      })
+    })
+
 
 exports.deleteFromPlaylists = functions.https.onCall((data, response) => {
 
@@ -303,88 +345,98 @@ exports.getFollowX = functions.https.onCall((data, response) => {
 
 exports.followUser = functions.https.onCall((data, response) => {
   
-  followingName = data.followingName // The name of the user that is being followed or unfollowed
-  followeruID = data.followeruID // The uID of the user that is doing the following or unfollowing
-  followerName = data.followerName // The name of the user that is doing the following or unfollowing
-  follow = data.follow
-  followerProfileURL  = data.followerProfileURL,
-  followingProfileURL = data.followingprofileURL,
+  const follower = data.follower // The name of the user that is being followed or unfollowed
+  const following = data.following // The uID of the user that is doing the following or unfollowing
+  const follow = data.follow
 
-  console.log(followingName+'    ' +followeruID+'    ' +followerName+"  "+follow)
+  // const follow = true
+  // const follower = {
+  //   uID: 'SznICZSnDvT08Jla0UVZ4RKIFx62',
+  //   name: 'RL Grime',
+  //   profileURL: 'https://firebasestorage.googleapis.com/v0/b/vibration-401b4.appspot.com/o/userProfileImage%2FSznICZSnDvT08Jla0UVZ4RKIFx62.jpeg?alt=media&token=2e14e2fd-907c-4221-b3bb-226ef2d1af47',
+  //   followerCount: 0,
+  //   followingCount: 0,
+  //   playlists: { listenLater: [], history: [], likes: [], timeline: [] },
+  //   createdPlaylists: [],
+  //   dateCreated: { seconds: 1554598918, nanoseconds: 291000000 },
+  //   prePlaylists: [ 'timeline', 'listenLater', 'history', 'likes' ] 
+  // }
 
-  // followingName = 'Test Producer' // The name of the user that is being followed
-  // followeruID = 'GBeZHcjhNjX44PXcJ8mE5BeYLBj2' // The uID of the user that is doing the following
-  // followerName = 'Perfet User' // The name of the user that is doing the following 
-  // follow = false 
+  // const following = {
+  //   uID: '8zis544aYVQ0SYfOa8Sb1Nf1o2z1',
+  //   name: 'Alison Wonderland',
+  //   profileURL: 'https://firebasestorage.googleapis.com/v0/b/vibration-401b4.appspot.com/o/userProfileImage%2F8zis544aYVQ0SYfOa8Sb1Nf1o2z1.jpeg?alt=media&token=68a60b56-9cd3-4931-9333-ee7cf1013cc4',
+  //   followerCount: 0,
+  //   followingCount: 0,
+  //   playlists: { listenLater: [], history: [], likes: [], timeline: [] },
+  //   createdPlaylists: [],
+  //   dateCreated: { seconds: 1554598918, nanoseconds: 291000000 },
+  //   prePlaylists: [ 'timeline', 'listenLater', 'history', 'likes' ] 
+  // }
+
+  console.log(follower)
+  console.log(following)
+
 
   
   followingNameObject = {
-    'name' : followingName, 
-    'profileURL' : followingProfileURL
+    'name' : following.name, 
+    'profileURL' : following.profileURL
   }
   followerNameObject = {
-    'name' : followerName, 
-    'profileURL' : followerProfileURL
+    'name' : follower.name, 
+    'profileURL' : follower.profileURL
   }
-  const followinguID = database.collection('users').where('name', '==', followingName).get().then(response => { //The uID of the user that is being followed
-    return response.docs[0].id
-  }).catch(error => {
-    return error
-  })
-
+  const followinguID = following.uID
+  const followeruID = follower.uID
   var promises = []
   //Promise to add followerUID and name to the 'followers' sub collection of the user being followed. and update the aggregate count,
  //Add followerUID and name to the 'followers' sub collection of the user being followed. and update the aggregate count,
   var copyfuID = null
   
-  return followinguID.then(response => {
-    console.log("response  :  "+response)
-    console.log('followeruID : '+followeruID)
-    if (follow) {
-      console.log('in true')
-      promises.push(database.collection('users').doc(response).collection('followers').doc(followeruID).set(followerNameObject))
-      promises.push(database.collection('users').doc(followeruID).collection('following').doc(response).set(followingNameObject))
-      editTimeline(followeruID, response, true)
-      console.log('end true')
-    } else {
-      console.log('in false')
-      promises.push(database.collection('users').doc(response).collection('followers').doc(followeruID).delete())
-      promises.push(database.collection('users').doc(followeruID).collection('following').doc(response).delete())
-      editTimeline(followeruID, response, false)
-      console.log('end false')
-    }
-
-    return Promise.all(promises)
-  }).catch(error => {
-    return error
-  })
+  
+  if (follow) {
+    console.log('in true')
+    promises.push(database.collection('users').doc(followinguID).collection('followers').doc(followeruID).set(followerNameObject))
+    promises.push(database.collection('users').doc(followeruID).collection('following').doc(followinguID).set(followingNameObject))
+    editTimeline(followeruID, followinguID, true)
+    console.log('end true')
+  } else {
+    console.log('in false')
+    promises.push(database.collection('users').doc(followinguID).collection('followers').doc(followeruID).delete())
+    promises.push(database.collection('users').doc(followeruID).collection('following').doc(followinguID).delete())
+    editTimeline(followeruID, followinguID, false)
+    console.log('end false')
+  }
 })
 
 // Function called when a user follows another user
 // User that was just followed's mixes will be added to the 'timeline' subcollection of the user that just followed them
 function editTimeline(followeruID, followeduID, copy) {
   promises = []
+  
   //Get user that has been followed mixes
   const mixes = getSubCollection(followeduID, 'mixes', false)
  
   //Add them to the user doing the 'following's timeline
 
-  return mixes.get().then(response => {
-    console.log('new')
-    for (i in response.docs()) {
-      mix = response[i]
-      console.log(mix + '   mix')
-      console.log(mix.data + '   mix.data')
-      console.log(mix.data()+'   mix.data()')
+  return mixes.then(response => {
+    const docs = response.docs
+    console.log(response)
+    response.forEach(mixResp => {
+      var mix = mixResp
       if (copy) {
-
+        
+        console.log('mix')
+        console.log(mix)
         addMix = {
           'dateUploaded': mix.dateUploaded,
-          'series' : mix.series,
+          'show' : mix.show,
           'title': mix.title,
-          'tracklist' : mix.tracklist,
-          'uID': mix.uID,
-          'producer': mix.producer,
+          'audioURL' : mix.audioURL,
+          // 'tracklist' : mix.tracklist,
+          'artworkURL' : mix.artworkURL,
+          'producers': mix.producers,
           'likeCount' : mix.likeCount ,
         }
 
@@ -393,7 +445,7 @@ function editTimeline(followeruID, followeduID, copy) {
         setter = database.collection('users').doc(followeruID).collection('timeline').doc(mix.id).delete()
       }
       promises.push(setter)
-    }
+    })
     return promises
   }).then(response => {
     return Promise.all(promises)
@@ -489,10 +541,10 @@ exports.addedFollower = functions.firestore
         addMix = {
           'dateUploaded': mix.dateUploaded,
           'title': mix.title,
-          'uID': mix.uID,
-          'producer': mix.producer,
+          'producerrs': mix.producers,
           'likeCount': mix.likeCount,
-          'streamURL' : mix.streamURL,
+          'audio' : mix.audio,
+          'artworkURL' : mix.artworkURL,
         }
       const mixPromise = database.collection('users').doc(fID).collection('timeline').doc(mix.id).set(addMix)
       mixPromises.push(mixPromise)
@@ -574,6 +626,30 @@ exports.addedFollowing = functions.firestore
       });
     });
   })
+
+  exports.addedMixToShow = functions.firestore
+  .document('shows/{sID}/mixes/{mID}')
+  .onCreate((change, context) => {
+    const sID = context.params.sID
+    //const fID = context.params.fID
+
+    showRef =  database.collection('shows').doc(sID)
+    
+    // Update aggregations in a transaction
+    return database.runTransaction(transaction => {
+      return transaction.get(showRef).then(show => {
+       
+        var newMixCount = show.data().mixCount + 1
+
+        
+        // Update followers info
+        return transaction.update(showRef, {
+          mixCount: newMixCount
+        });
+      });
+    });
+  })
+
 
   exports.lostFollowing = functions.firestore
   .document('users/{uID}/following/{fID}')
@@ -660,17 +736,18 @@ exports.addedFollowing = functions.firestore
 
   exports.likeMix = functions.https.onCall((data, response) => {
   
+    console.log(data)
     mID = data.mID 
     likeruID = data.likeruID 
     produceruID = data.likeruID 
     likerName = data.likerName 
     mixName = data.mixName
     liked = data.liked
-    producerName = data.producerName
+    producers = data.producers
     profileURL = data.profileURL
     artworkURL = data.artworkURL
-    likes = data.likes
-    plays = data.plays  
+    likeCount = data.likeCount
+    playCount = data.playCount  
      
     // mID = 'aXMRaJwmgMONp4I83tEi'
     // likeruID = 'GBeZHcjhNjX44PXcJ8mE5BeYLBj2'
@@ -686,10 +763,10 @@ exports.addedFollowing = functions.firestore
     }
     mixNameObject = {
       'title' : mixName,
-      'producer' : producerName,
+      'producers' : producers,
       'artWorkURL' : artworkURL,
-      'likes' : likes,
-      'plays' : plays,
+      'likeCount' : likeCount,
+      'playCount' : playCount,
     }
     
     console.log('hello')
@@ -699,11 +776,19 @@ exports.addedFollowing = functions.firestore
    //Add followerUID and name to the 'followers' sub collection of the user being followed. and update the aggregate count,
    
     if (liked) {
+      producers.forEach(producer => {
+        var uID = producer.uID
+        promises.push(database.collection('users').doc(uID).collection('mixes').doc(mID).collection('liked').doc(likeruID).set(likerNameObject))
+      })
       promises.push(database.collection('mixes').doc(mID).collection('liked').doc(likeruID).set(likerNameObject))
-      promises.push(database.collection('users').doc(likeruID).collection('likedMixes').doc(mID).set(mixNameObject))
+      promises.push(database.collection('users').doc(likeruID).collection('liked').doc(mID).set(mixNameObject))
     } else {
+      producers.forEach(producer => {
+        var uID = producer.uID
+        promises.push(database.collection('users').doc(uID).collection('mixes').doc(mID).collection('liked').doc(likeruID).delete())
+      })
       promises.push(database.collection('mixes').doc(mID).collection('liked').doc(likeruID).delete())
-      promises.push(database.collection('users').doc(likeruID).collection('likedMixes').doc(mID).delete())
+      promises.push(database.collection('users').doc(likeruID).collection('liked').doc(mID).delete())
     }
 
     return Promise.all(promises)
@@ -760,42 +845,56 @@ exports.unIndexMix = functions.firestore
   .document('mixes/{mID}')
   .onDelete((snap, context) => {
 
+      const index = client.initIndex('test_mixes')
+      const objectID = snap.id
+      return index.deleteObject(objectID)
+    })
+
+exports.unIndexMix = functions.firestore
+  .document('users/{uID}')
+  .onDelete((snap, context) => {
+
+      const index = client.initIndex('producers')
+      const objectID = snap.id
+      return index.deleteObject(objectID)
+    })
+
+exports.unIndexMix = functions.firestore
+  .document('shows/{sID}')
+  .onDelete((snap, context) => {
+
+      const index = client.initIndex('shows')
       const objectID = snap.id
       return index.deleteObject(objectID)
     })
 
 
-    exports.indexEvent = functions.https
-      .onCall((eventData, response) => {
+exports.indexEvent = functions.https
+  .onCall((eventData, response) => {
 
-      var options = { year: 'numeric', month: 'long', day: 'numeric' }
-      var options2 = { year: 'numeric', month: 'numeric', day: 'numeric' }
-      const index = client.initIndex('events')
-    
-      const data = eventData.eventData
-      const objectID = eventData.eID
-      console.log(data)
-      const name = data.name
-         
-      const producers = data.producers
-      const unix = new Date()
-      const timestamp = Date.now()
-      const dateCreated = unix.toLocaleDateString('en-GB', options);
-      const dateCreated2 = unix.toLocaleDateString('en-GB', options2); //Secondary search for users that want to search in the dd/mm/yy format, which was not previously supported
-      
-      var indexObject = {
-        
-        objectID,
-        name,
-        producers,
-        timestamp,
-        dateCreated,
-        dateCreated2,
-      }
+  var options = { year: 'numeric', month: 'long', day: 'numeric' }
+  var options2 = { year: 'numeric', month: 'numeric', day: 'numeric' }
+  const index = client.initIndex('events')
 
-      
-      return index.addObject(indexObject)
-  })
+  const data = eventData.eventData
+  const objectID = eventData.eID
+  const name = data.name
+  const producers = data.producers
+  const unix = new Date()
+  const timestamp = Date.now()
+  const dateCreated = unix.toLocaleDateString('en-GB', options);
+  const dateCreated2 = unix.toLocaleDateString('en-GB', options2); //Secondary search for users that want to search in the dd/mm/yy format, which was not previously supported
+  
+  var indexObject = {    
+    objectID,
+    name,
+    producers,
+    timestamp,
+    dateCreated,
+    dateCreated2,
+  }
+  return index.addObject(indexObject)
+})
 
   exports.indexShow = functions.https
       .onCall((showData, response) => {
@@ -806,7 +905,7 @@ exports.unIndexMix = functions.firestore
     
       const data = showData.showData
       const objectID = showData.eID
-      
+      const eID = showData.eID
       const name = data.name
          
       const producers = data.producers
@@ -819,6 +918,7 @@ exports.unIndexMix = functions.firestore
         
         objectID,
         producers,
+        eID,
         name,
         timestamp,
         dateCreated,
@@ -829,5 +929,42 @@ exports.unIndexMix = functions.firestore
       return index.addObject(indexObject)
   })
 
+  exports.indexUser = functions.https
+      .onCall((data, response) => {
 
+      var options = { year: 'numeric', month: 'long', day: 'numeric' }
+      var options2 = { year: 'numeric', month: 'numeric', day: 'numeric' }
+      const index = client.initIndex('producers')
+    
+      const uID = data.uID
+      const name = data.name
+      const unix = new Date()
+      const timestamp = Date.now()
+      const dateCreated = unix.toLocaleDateString('en-GB', options);
+      const dateCreated2 = unix.toLocaleDateString('en-GB', options2); //Secondary search for users that want to search in the dd/mm/yy format, which was not previously supported
+      
+      var indexObject = {        
+        name,
+        timestamp,
+        dateCreated,
+        dateCreated2,
+        uID,
+      }
+
+      
+      return index.addObject(indexObject)
+  })
+
+  exports.updateUserProfile = functions.https
+  .onCall((data, response) => {
+
+  const index = client.initIndex('producers')
+
+  const objectID = data.uID
+  const profileURL = data.profileURL
   
+   return index.partialUpdateObject({
+     profileURL, 
+     objectID
+   })
+})

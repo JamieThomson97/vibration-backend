@@ -14,7 +14,7 @@ exports.helloWorld = functions.https.onCall((req, res) => {
 });
 
 exports.addMix = functions.https.onCall((data, context) => {
-  const uID = context.auth.uid
+const uID = context.auth.uid
   var mixData = {
     uID: uID,
     title: data.title,
