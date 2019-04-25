@@ -1110,10 +1110,14 @@ exports.indexShow = functions.https.onCall((showData, response) => {
 });
 
 exports.indexUser = functions.https.onCall((data, response) => {
+  //options1 and 2 are objects that are passed to dateFormatting functions in future
   var options = { year: "numeric", month: "long", day: "numeric" };
   var options2 = { year: "numeric", month: "numeric", day: "numeric" };
+
+  //index defines the index in Algolia we wish to modify
   const index = client.initIndex("producers");
 
+  //defining the data that will be written to Algoilia
   const uID = data.uID;
   const name = data.name;
   const unix = new Date();
@@ -1121,6 +1125,7 @@ exports.indexUser = functions.https.onCall((data, response) => {
   const dateCreated = unix.toLocaleDateString("en-GB", options);
   const dateCreated2 = unix.toLocaleDateString("en-GB", options2); //Secondary search for users that want to search in the dd/mm/yy format, which was not previously supported
 
+  //specifying the data in an object
   var indexObject = {
     name,
     timestamp,
@@ -1129,6 +1134,7 @@ exports.indexUser = functions.https.onCall((data, response) => {
     uID
   };
 
+  //creates the specified object in algolia
   return index.addObject(indexObject);
 });
 
