@@ -460,20 +460,10 @@ exports.followUser = functions.https.onCall((data, response) => {
   //"following" subColletion, and add the followed "followers" subCollection for the user that is being followed
   if (follow) {
     promises.push(
-      database
-        .collection("users")
-        .doc(followinguID)
-        .collection("followers")
-        .doc(followeruID)
-        .set(followerNameObject)
+      database.collection("users").doc(followinguID).collection("followers").doc(followeruID).set(followerNameObject)
     );
     promises.push(
-      database
-        .collection("users")
-        .doc(followeruID)
-        .collection("following")
-        .doc(followinguID)
-        .set(followingNameObject)
+      database.collection("users").doc(followeruID).collection("following").doc(followinguID).set(followingNameObject)
     );
     //the editTimeline function is called
     editTimeline(followeruID, followinguID, true);
@@ -481,20 +471,10 @@ exports.followUser = functions.https.onCall((data, response) => {
     //"following" subColletion, and delete the following user from the "followers" subCollection for the user that is being followed
   } else {
     promises.push(
-      database
-        .collection("users")
-        .doc(followinguID)
-        .collection("followers")
-        .doc(followeruID)
-        .delete()
+      database.collection("users").doc(followinguID).collection("followers").doc(followeruID).delete()
     );
     promises.push(
-      database
-        .collection("users")
-        .doc(followeruID)
-        .collection("following")
-        .doc(followinguID)
-        .delete()
+      database.collection("users").doc(followeruID).collection("following").doc(followinguID).delete()
     );
     editTimeline(followeruID, followinguID, false);
   }
