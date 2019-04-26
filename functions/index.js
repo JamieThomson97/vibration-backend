@@ -483,49 +483,38 @@ exports.followUser = functions.https.onCall((data, response) => {
   });
 });
 
-// Function called when a user follows another user
-// User that was just followed's mixes will be added to the 'timeline' subcollection of the user that just followed them
+// this function called when a user follows or un-follows another user
+// the user that was just followed or un-followed's mixes will be add or deleted from
+// the 'timeline' subcollection of the user that just followed or un-followed them
 function editTimeline(followeruID, followeduID, copy) {
+  //receives the userID of the user being doing the following and the user being followed.
+  //copy - is Boolean that denotes whether to add(True)or delete(False) the mixes
   promises = [];
 
-  //Get user that has been followed mixes
+  //get user that has been followed mixes
   const mixes = getSubCollection(followeduID, "mixes", false);
 
-  //Add them to the user doing the 'following's timeline
-
+  //add them to the user doing the 'following's timeline
   return mixes
     .then(response => {
-      console.log("response[0]");
-      console.log(response[0]);
+      //loop through each mix returned
       response.forEach(mixResp => {
         var mix = mixResp;
         if (copy) {
-          console.log("mix");
-          console.log(mix);
           addMix = {
             dateUploaded: mix.dateUploaded,
             show: mix.show,
             title: mix.title,
             audioURL: mix.audioURL,
-            // 'tracklist' : mix.tracklist,
             artworkURL: mix.artworkURL,
             producers: mix.producers,
             likeCount: mix.likeCount
           };
-
-          setter = database
-            .collection("users")
-            .doc(followeruID)
-            .collection("timeline")
-            .doc(mix.mID)
-            .set(addMix);
+          //if the mixes should be added to the timeline, each mix is looped through and added
+          setter = database.collection("users").doc(followeruID).collection("timeline").doc(mix.mID).set(addMix);
         } else {
-          setter = database
-            .collection("users")
-            .doc(followeruID)
-            .collection("timeline")
-            .doc(mix.mID)
-            .delete();
+          //if the mixes should be deleted, each mix is looped through and the mID used to delete the required mixes from the timeline
+          setter = database.collection("users").doc(followeruID).collection("timeline").doc(mix.mID).delete();
         }
         promises.push(setter);
       });
