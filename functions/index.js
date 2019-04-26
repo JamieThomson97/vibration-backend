@@ -93,6 +93,8 @@ exports.addMix = functions.https.onCall((data, context) => {
 // Notes:
 // Doesn't have functionality for actual audio file yet,
 exports.deleteMix = functions.https.onCall((data, response) => {
+  const storage = firebase.storage();
+
   var promises = [];
   const mID = data.mID;
   const uID = data.uID;
@@ -128,12 +130,10 @@ exports.deleteMix = functions.https.onCall((data, response) => {
     .then(response => {
       const playlistData = response.data();
       Object.keys(playlistData.uIDs).forEach(uID => {
-        console.log(uID);
         var playlistNames = playlistData.uIDs[uID];
-        console.log(playlistNames);
         Object.keys(playlistNames).forEach(playlistNameKey => {
           var playlistName = playlistNames[playlistNameKey];
-          console.log(playlistName);
+
           var promise = database
             .collection("users")
             .doc(uID)
@@ -174,7 +174,11 @@ exports.deleteMix = functions.https.onCall((data, response) => {
             .delete()
         );
       }
-      // promises.push(firebase.functions().httpsCallable('unIndexMix' , { NmID : NmID }))
+      promises.push(
+        firebase.functions().httpsCallable("unIndexMix", {
+          NmID: NmID
+        })
+      );
       return promises;
     })
     .then(response => {
@@ -186,8 +190,13 @@ exports.deleteMix = functions.https.onCall((data, response) => {
       };
     })
     .then(response => {
-      return "success deleting mix";
-      //Need to delete from storage
+      var deleteRef = storage.ref("mixesAudio/" + mID + ".mp3");
+
+      // Delete the file
+      return deleteRef.delete();
+    })
+    .then(() => {
+      return "File Deleted Successfully";
     })
     .catch(error => {
       return error;
@@ -403,6 +412,8 @@ exports.getFollowX = functions.https.onCall((data, response) => {
   const uID = data.uID;
   const followX = data.followX;
   results = [];
+  //depending on if 'followers' or 'following' is passed as input, the given subCollection is queried
+  //for the selectedUser
   query = database
     .collection("users")
     .doc(uID)
@@ -413,12 +424,13 @@ exports.getFollowX = functions.https.onCall((data, response) => {
     .get()
     .then(snapshot => {
       const documents = snapshot.docs;
-
       for (var entry = 0; entry < documents.length; entry++) {
         const item = documents[entry].data();
         item["uID"] = documents[entry].id;
+        //each follower / following is iterated through pushed an array called 'results'
         results.push(item);
       }
+      //the populated array is returned
       return results;
     })
     .catch(error => {
@@ -427,43 +439,11 @@ exports.getFollowX = functions.https.onCall((data, response) => {
 });
 
 exports.followUser = functions.https.onCall((data, response) => {
-  const follower = data.follower; // The name of the user that is being followed or unfollowed
-  const following = data.following; // The uID of the user that is doing the following or unfollowing
+  const follower = data.follower;
+  const following = data.following;
   const follow = data.follow;
 
-  // const follow = true
-  // const follower = {
-  //   uID: 'SznICZSnDvT08Jla0UVZ4RKIFx62',
-  //   name: 'RL Grime',
-  //   profileURL: 'https://firebasestorage.googleapis.com/v0/b/vibration-401b4.appspot.com/o/userProfileImage%2FSznICZSnDvT08Jla0UVZ4RKIFx62.jpeg?alt=media&token=2e14e2fd-907c-4221-b3bb-226ef2d1af47',
-  //   followerCount: 0,
-  //   followingCount: 0,
-  //   playlists: { listenLater: [], history: [], likes: [], timeline: [] },
-  //   createdPlaylists: [],
-  //   dateCreated: { seconds: 1554598918, nanoseconds: 291000000 },
-  //   prePlaylists: [ 'timeline', 'listenLater', 'history', 'likes' ]
-  // }
-
-  // const following = {
-  //   uID: '8zis544aYVQ0SYfOa8Sb1Nf1o2z1',
-  //   name: 'Alison Wonderland',
-  //   profileURL: 'https://firebasestorage.googleapis.com/v0/b/vibration-401b4.appspot.com/o/userProfileImage%2F8zis544aYVQ0SYfOa8Sb1Nf1o2z1.jpeg?alt=media&token=68a60b56-9cd3-4931-9333-ee7cf1013cc4',
-  //   followerCount: 0,
-  //   followingCount: 0,
-  //   playlists: { listenLater: [], history: [], likes: [], timeline: [] },
-  //   createdPlaylists: [],
-  //   dateCreated: { seconds: 1554598918, nanoseconds: 291000000 },
-  //   prePlaylists: [ 'timeline', 'listenLater', 'history', 'likes' ]
-  // }
-
-  console.log("follow");
-  console.log(follow);
-
-  console.log("follower");
-  console.log(follower);
-  console.log("following");
-  console.log(following);
-
+  //defining the objects that will be set in the database
   followingNameObject = {
     name: following.name,
     profileURL: following.profileURL
@@ -475,12 +455,10 @@ exports.followUser = functions.https.onCall((data, response) => {
   const followinguID = following.uID;
   const followeruID = follower.uID;
   var promises = [];
-  //Promise to add followerUID and name to the 'followers' sub collection of the user being followed. and update the aggregate count,
-  //Add followerUID and name to the 'followers' sub collection of the user being followed. and update the aggregate count,
-  var copyfuID = null;
 
+  //create the database requests to add the followed user user from the user that is doing the following's
+  //"following" subColletion, and add the followed "followers" subCollection for the user that is being followed
   if (follow) {
-    console.log("in true");
     promises.push(
       database
         .collection("users")
@@ -497,10 +475,11 @@ exports.followUser = functions.https.onCall((data, response) => {
         .doc(followinguID)
         .set(followingNameObject)
     );
+    //the editTimeline function is called
     editTimeline(followeruID, followinguID, true);
-    console.log("end true");
+    //create the database requests to delete the followed user from the user that is doing the following's
+    //"following" subColletion, and delete the following user from the "followers" subCollection for the user that is being followed
   } else {
-    console.log("in false");
     promises.push(
       database
         .collection("users")
@@ -518,12 +497,9 @@ exports.followUser = functions.https.onCall((data, response) => {
         .delete()
     );
     editTimeline(followeruID, followinguID, false);
-    console.log("end false");
   }
-  console.log("above return promise dot all");
   return Promise.all(promises).then(response => {
-    console.log(response);
-    return "done";
+    return "Complete";
   });
 });
 
@@ -984,8 +960,16 @@ exports.likeMix = functions.https.onCall((data, response) => {
 });
 
 exports.indexMix = functions.https.onCall((mix, response) => {
-  var options = { year: "numeric", month: "long", day: "numeric" };
-  var options2 = { year: "numeric", month: "numeric", day: "numeric" };
+  var options = {
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  };
+  var options2 = {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric"
+  };
   const index = client.initIndex("mixes");
 
   const data = mix.mixData;
@@ -1029,10 +1013,18 @@ exports.indexMix = functions.https.onCall((mix, response) => {
   return index.addObject(indexObject);
 });
 
-exports.unIndexShow = functions.firestore
+exports.unIndexMix = functions.firestore
   .document("mixes/{mID}")
   .onDelete((snap, context) => {
     const index = client.initIndex("mixes");
+    const objectID = snap.id;
+    return index.deleteObject(objectID);
+  });
+
+exports.unIndexShow = functions.firestore
+  .document("mixes/{mID}")
+  .onDelete((snap, context) => {
+    const index = client.initIndex("show");
     const objectID = snap.id;
     return index.deleteObject(objectID);
   });
@@ -1054,8 +1046,16 @@ exports.unIndexEvent = functions.firestore
   });
 
 exports.indexEvent = functions.https.onCall((eventData, response) => {
-  var options = { year: "numeric", month: "long", day: "numeric" };
-  var options2 = { year: "numeric", month: "numeric", day: "numeric" };
+  var options = {
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  };
+  var options2 = {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric"
+  };
   const index = client.initIndex("events");
 
   const data = eventData.eventData;
@@ -1081,8 +1081,16 @@ exports.indexEvent = functions.https.onCall((eventData, response) => {
 });
 
 exports.indexShow = functions.https.onCall((showData, response) => {
-  var options = { year: "numeric", month: "long", day: "numeric" };
-  var options2 = { year: "numeric", month: "numeric", day: "numeric" };
+  var options = {
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  };
+  var options2 = {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric"
+  };
   const index = client.initIndex("shows");
 
   const data = showData.showData;
@@ -1111,8 +1119,16 @@ exports.indexShow = functions.https.onCall((showData, response) => {
 
 exports.indexUser = functions.https.onCall((data, response) => {
   //options1 and 2 are objects that are passed to dateFormatting functions in future
-  var options = { year: "numeric", month: "long", day: "numeric" };
-  var options2 = { year: "numeric", month: "numeric", day: "numeric" };
+  var options = {
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  };
+  var options2 = {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric"
+  };
 
   //index defines the index in Algolia we wish to modify
   const index = client.initIndex("producers");
@@ -1123,7 +1139,7 @@ exports.indexUser = functions.https.onCall((data, response) => {
   const unix = new Date();
   const timestamp = Date.now();
   const dateCreated = unix.toLocaleDateString("en-GB", options);
-  const dateCreated2 = unix.toLocaleDateString("en-GB", options2); //Secondary search for users that want to search in the dd/mm/yy format, which was not previously supported
+  const dateCreated2 = unix.toLocaleDateString("en-GB", options2);
 
   //specifying the data in an object
   var indexObject = {
