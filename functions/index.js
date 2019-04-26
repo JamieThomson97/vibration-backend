@@ -374,33 +374,31 @@ exports.getSubCollectionbyDate = functions.https.onCall((data, response) => {
     });
 });
 
+//function that returns a given subCollection of a user. Typically, "mixes", "timeline", "followers", "following" etc
 function getSubCollection(uID, subCollection, amount) {
+  //takes the uID of user the user, and the subCollection to be returned,
+  //as well as an optional amount to limit the number of returned results by
   var results = [];
 
+  //the passed information is used to define the query
   if (!amount) {
-    query = database
-      .collection("users")
-      .doc(uID)
-      .collection(subCollection);
+    query = database.collection("users").doc(uID).collection(subCollection);
   } else {
-    query = database
-      .collection("users")
-      .doc(uID)
-      .collection(subCollection)
-      .orderBy("dateUploaded", "DESC")
+    query = database.collection("users").doc(uID).collection(subCollection).orderBy("dateUploaded", "DESC")
       .limit(amount);
   }
 
   return query
-    .get()
-    .then(snapshot => {
+    .get().then(snapshot => {
       const documents = snapshot.docs;
-
+      //each document in the returned query is looped through
       for (var entry = 0; entry < documents.length; entry++) {
         const item = documents[entry].data();
         item["mID"] = documents[entry].id;
+        //and added to the "results" array
         results.push(item);
       }
+      //when the loop is complete, the results array is returned.
       return results;
     })
     .catch(error => {
