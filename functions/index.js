@@ -822,11 +822,12 @@ exports.removedFromMixesSubCollection = functions.firestore
     });
   });
 
+//function to update all the required locations in Firestore with the new like or un-like
 exports.likeMix = functions.https.onCall((data, response) => {
-  console.log(data);
+
+  
   mID = data.mID;
   likeruID = data.likeruID;
-  produceruID = data.likeruID;
   likerName = data.likerName;
   mixName = data.mixName;
   liked = data.liked;
@@ -835,14 +836,7 @@ exports.likeMix = functions.https.onCall((data, response) => {
   artworkURL = data.artworkURL;
   likeCount = data.likeCount;
   playCount = data.playCount;
-
-  // mID = 'aXMRaJwmgMONp4I83tEi'
-  // likeruID = 'GBeZHcjhNjX44PXcJ8mE5BeYLBj2'
-  // produceruID = 'lN4w75KT3la5sCRS5UjZE2uqxd43'
-  // likerName = 'Perfect User'
-  // mixName = 'Mix 2'
-  // liked = false
-
+  
   likerNameObject = {
     name: likerName,
     profileURL: profileURL
@@ -854,75 +848,43 @@ exports.likeMix = functions.https.onCall((data, response) => {
     likeCount: likeCount,
     playCount: playCount
   };
+    var promises = [];
 
-  console.log("hello");
-
-  var promises = [];
-  //Promise to add followerUID and name to the 'followers' sub collection of the user being followed. and update the aggregate count,
-  //Add followerUID and name to the 'followers' sub collection of the user being followed. and update the aggregate count,
-
-  if (liked) {
+    //if the mix is being liked
+    if (liked) {
+    //for each producer of the mix, update mix document in their 'mixes' subCollection, with their new liker
     producers.forEach(producer => {
       var uID = producer.uID;
       promises.push(
         database
-          .collection("users")
-          .doc(uID)
-          .collection("mixes")
-          .doc(mID)
-          .collection("liked")
-          .doc(likeruID)
-          .set(likerNameObject)
+          .collection("users").doc(uID).collection("mixes").doc(mID).collection("liked").doc(likeruID).set(likerNameObject)
       );
     });
+    //add the liker to the mix document in the top level 'mixes' collection. 
     promises.push(
-      database
-        .collection("mixes")
-        .doc(mID)
-        .collection("liked")
-        .doc(likeruID)
-        .set(likerNameObject)
+      database.collection("mixes").doc(mID).collection("liked").doc(likeruID).set(likerNameObject)
     );
+    //add the mix to the user doing the liking's "liked" subcollection
     promises.push(
-      database
-        .collection("users")
-        .doc(likeruID)
-        .collection("liked")
-        .doc(mID)
-        .set(mixNameObject)
-    );
-  } else {
-    producers.forEach(producer => {
-      var uID = producer.uID;
-      promises.push(
-        database
-          .collection("users")
-          .doc(uID)
-          .collection("mixes")
-          .doc(mID)
-          .collection("liked")
-          .doc(likeruID)
-          .delete()
-      );
-    });
-    promises.push(
-      database
-        .collection("mixes")
-        .doc(mID)
-        .collection("liked")
-        .doc(likeruID)
-        .delete()
-    );
-    promises.push(
-      database
-        .collection("users")
-        .doc(likeruID)
-        .collection("liked")
-        .doc(mID)
-        .delete()
+      database.collection("users").doc(likeruID).collection("liked").doc(mID).set(mixNameObject)
     );
   }
-
+  //if the mix is being unliked
+  //delete the user data and mix data from all of the same locations
+  else {
+    producers.forEach(producer => {
+      var uID = producer.uID;
+      promises.push(
+        database.collection("users").doc(uID).collection("mixes").doc(mID).collection("liked").doc(likeruID).delete()
+      );
+    });
+    promises.push(
+      database.collection("mixes").doc(mID).collection("liked").doc(likeruID).delete()
+    );
+    promises.push(
+      database.collection("users").doc(likeruID).collection("liked").doc(mID).delete()
+    );
+  }
   return Promise.all(promises);
 });
 
