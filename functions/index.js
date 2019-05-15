@@ -1091,6 +1091,7 @@ exports.indexUser = functions.https.onCall((data, response) => {
     dateCreated2,
     uID
   };
+  indexObject['objectID'] = uID
 
   //creates the specified object in algolia
   return index.addObject(indexObject);
