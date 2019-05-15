@@ -208,8 +208,7 @@ exports.deleteFromShowEvent = functions.https.onCall((data, response) => {
   const gatherName = data.gatherName;
   const mID = data.mID;
 
-  //get ID from gathername
-
+  
   return database
     .collection(type)
     .where("name", "==", gatherName)
@@ -837,27 +836,38 @@ exports.likeMix = functions.https.onCall((data, response) => {
   likeCount = data.likeCount;
   playCount = data.playCount;
   
+  if(!data.dateUploaded){
+    data.dateUploaded = new Date(1557878400)
+  }
+
   likerNameObject = {
     name: likerName,
     profileURL: profileURL
   };
   mixNameObject = {
     title: mixName,
+    dateUploaded: data.dateUploaded,
     producers: producers,
-    artWorkURL: artworkURL,
+    artworkURL: artworkURL,
     likeCount: likeCount,
-    playCount: playCount
+    playCount: playCount,
+    dateAdded: new Date(),
   };
     var promises = [];
 
     //if the mix is being liked
     if (liked) {
+      
     //for each producer of the mix, update mix document in their 'mixes' subCollection, with their new liker
     producers.forEach(producer => {
       var uID = producer.uID;
+      console.log('at error bit')
+      console.log(uID)
+      console.log(mID)
+      console.log(likeruID)
+      console.log(likerNameObject)
       promises.push(
-        database
-          .collection("users").doc(uID).collection("mixes").doc(mID).collection("liked").doc(likeruID).set(likerNameObject)
+        database.collection("users").doc(uID).collection("mixes").doc(mID).collection("liked").doc(likeruID).set(likerNameObject)
       );
     });
     //add the liker to the mix document in the top level 'mixes' collection. 
@@ -939,12 +949,15 @@ exports.indexMix = functions.https.onCall((mix, response) => {
     indexObject["show"] = data.show;
   }
 
+  indexObject['search'] = true
+
   return index.addObject(indexObject);
 });
 
 exports.unIndexMix = functions.firestore
   .document("mixes/{mID}")
   .onDelete((snap, context) => {
+    //define the index in Algolia you wish to write to
     const index = client.initIndex("mixes");
     const objectID = snap.id;
     return index.deleteObject(objectID);
